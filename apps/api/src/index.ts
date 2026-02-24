@@ -1,6 +1,8 @@
 import cors from "cors";
 import express from "express";
 import { prisma } from "./lib/prisma.js";
+import { rpcRouter } from "./routes/rpc.js";
+import { workspacesRouter } from "./routes/workspaces.js";
 
 const app = express();
 const port = 4000;
@@ -8,7 +10,6 @@ const webOrigin = process.env.WEB_ORIGIN ?? "http://localhost:3000";
 
 app.use((req, res, next) => {
   const origin = req.get("origin");
-
   if (origin && origin !== webOrigin) {
     res.status(403).json({
       error: "CORS origin not allowed"
@@ -51,6 +52,9 @@ app.get("/api/workspaces", async (_req, res) => {
     });
   }
 });
+
+app.use("/api/workspaces", workspacesRouter);
+app.use("/api/rpc", rpcRouter);
 
 const server = app.listen(port, () => {
   console.log(`API server listening on http://localhost:${port}`);

@@ -3,7 +3,7 @@ import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 
 declare global {
-  // Reuse Prisma client during local reloads.
+  // Reuse Prisma client during dev reloads.
   // eslint-disable-next-line no-var
   var prisma: PrismaClient | undefined;
 }
