@@ -26,6 +26,7 @@ import {
   ContractArg,
   convertToScVal,
   type NormalizedContractSpec,
+  createNormalizedContractSpecFromFunctionNames,
 } from "@devconsole/soroban-utils";
 import { signTransaction } from "@stellar/freighter-api";
 import { SavedCallsSheet } from "./saved-calls-sheet";
