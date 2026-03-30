@@ -30,13 +30,19 @@ import { Input } from "@devconsole/ui";
 import { Label } from "@devconsole/ui";
 import { toast } from "sonner";
 import { useAbiStore } from "@/store/useAbiStore";
-import { parseWasmMetadata } from "@devconsole/soroban-utils";
+import { useWorkspaceStore } from "@/store/useWorkspaceStore";
+import {
+  createNormalizedContractSpecFromFunctionNames,
+  normalizeAbiJson,
+  parseWasmMetadata,
+} from "@devconsole/soroban-utils";
 
 export default function ContractDetailPage() {
   const params = useParams();
   const contractId = params.contractId as string;
   const { getActiveNetworkConfig } = useNetworkStore();
   const { setSpec } = useAbiStore();
+  const { activeWorkspaceId, addContractToWorkspace } = useWorkspaceStore();
 
   const [overview, setOverview] = useState<ContractOverview | null>(null);
   const [loading, setLoading] = useState(true);
@@ -56,18 +62,14 @@ export default function ContractDetailPage() {
       if (name.endsWith(".json")) {
         const text = await file.text();
         const json = JSON.parse(text);
+        const spec = normalizeAbiJson(json);
 
-        const functions = extractFunctionNamesFromAbiJson(json);
-
-        if (!functions.length) {
+        if (!spec.functions.length) {
           toast.error("No functions discovered in ABI JSON.");
           return;
         }
 
-        setSpec(contractId, {
-          rawSpec: JSON.stringify(json),
-          functions,
-        });
+        setSpec(contractId, { ...spec, contractId });
 
         toast.success("Local ABI loaded. Interaction UI is ready.");
       } else if (name.endsWith(".wasm")) {
@@ -79,10 +81,17 @@ export default function ContractDetailPage() {
           return;
         }
 
-        setSpec(contractId, {
-          rawSpec: "local-wasm",
-          functions,
-        });
+        setSpec(
+          contractId,
+          {
+            ...createNormalizedContractSpecFromFunctionNames(
+              functions,
+              "wasm",
+              "local-wasm",
+            ),
+            contractId,
+          },
+        );
 
         toast.success("Local WASM interface loaded. Interaction UI is ready.");
       } else {
@@ -98,61 +107,51 @@ export default function ContractDetailPage() {
     }
   };
 
-  const extractFunctionNamesFromAbiJson = (abi: any): string[] => {
-    const names = new Set<string>();
-
-    if (!abi) return [];
-
-    // Common pattern: { functions: string[] }
-    if (Array.isArray(abi.functions)) {
-      abi.functions.forEach((f: any) => {
-        if (typeof f === "string") names.add(f);
-        if (f && typeof f.name === "string") names.add(f.name);
-      });
-    }
-
-    // CLI-style: top-level array of spec entries
-    const entries = Array.isArray(abi)
-      ? abi
-      : Array.isArray(abi.spec)
-        ? abi.spec
-        : [];
-
-    for (const entry of entries) {
-      if (!entry) continue;
-      if (
-        typeof entry.name === "string" &&
-        typeof entry.type === "string" &&
-        entry.type.toLowerCase().includes("func")
-      ) {
-        names.add(entry.name);
-      }
-      if (
-        typeof entry.name === "string" &&
-        typeof entry.kind === "string" &&
-        entry.kind.toLowerCase().includes("func")
-      ) {
-        names.add(entry.name);
-      }
-    }
-
-    return Array.from(names);
-  };
-
   useEffect(() => {
     async function load() {
       if (!contractId) return;
-      const network = getActiveNetworkConfig();
-      const result = await fetchContractOverview(
-        decodeURIComponent(contractId).trim(),
-        network.name,
-        network.rpcUrl
-      );
-      setOverview(result);
-      setLoading(false);
+
+      try {
+        const network = getActiveNetworkConfig();
+        const server = new SorobanRpc.Server(network.rpcUrl);
+        const cleanId = decodeURIComponent(contractId).trim();
+        if (!StrKey.isValidContract(cleanId)) {
+          throw new Error(
+            "Invalid Contract ID format. Must be a 56-character string starting with C.",
+          );
+        }
+
+        const ledgerKey = xdr.LedgerKey.contractData(
+          new xdr.LedgerKeyContractData({
+            contract: new Address(cleanId).toScAddress(),
+            key: xdr.ScVal.scvLedgerKeyContractInstance(),
+            durability: xdr.ContractDataDurability.persistent(),
+          }),
+        );
+
+        const response = await server.getLedgerEntries(ledgerKey);
+
+        if (!response.entries || response.entries.length === 0) {
+          setData({ exists: false });
+        } else {
+          const entry = response.entries[0];
+          addContractToWorkspace(activeWorkspaceId, cleanId);
+          setData({
+            exists: true,
+            lastModified: entry.lastModifiedLedgerSeq,
+            ledgerSeq: entry.lastModifiedLedgerSeq,
+          });
+        }
+      } catch (err: any) {
+        console.error("Contract Fetch Error:", err);
+        setError(err.message || "Failed to fetch contract data");
+      } finally {
+        setLoading(false);
+      }
     }
-    load();
-  }, [contractId, getActiveNetworkConfig]);
+
+    fetchContract();
+  }, [contractId, getActiveNetworkConfig, activeWorkspaceId, addContractToWorkspace]);
 
   return (
     <div className="container mx-auto space-y-8 p-6">

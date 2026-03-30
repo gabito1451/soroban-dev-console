@@ -34,5 +34,12 @@ export class WorkspacesController {
   @Patch(":id")
   update(@Param("id") id: string, @Body() dto: UpdateWorkspaceDto) {
     return this.service.update(id, dto);
+import { Controller, Get } from "@nestjs/common";
+
+@Controller("workspaces")
+export class WorkspacesController {
+  @Get()
+  listWorkspaces() {
+    return [];
   }
 }

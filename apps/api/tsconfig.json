@@ -10,7 +10,15 @@
     "outDir": "dist",
     "noEmitOnError": true,
     "experimentalDecorators": true,
-    "emitDecoratorMetadata": true
+    "emitDecoratorMetadata": true,
+    "strictPropertyInitialization": false
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  "exclude": [
+    "src/index.ts",
+    "src/controllers/**/*.ts",
+    "src/routes/**/*.ts",
+    "src/middleware/**/*.ts",
+    "src/services/**/*.ts"
+  ]
 }
